@@ -1,9 +1,27 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 const regions = ["Africa", "Americas", "Asia", "Europe", "Oceania"];
 
-function Controls({ searchTerm, setSearchTerm, region, setRegion }) {
+export default function Controls({
+  searchTerm,
+  setSearchTerm,
+  region,
+  setRegion,
+}) {
   const [open, setOpen] = useState(false);
+  const filterRef = useRef(null);
+
+  useEffect(() => {
+    const handlePointerDown = (e) => {
+      if (!filterRef.current) return;
+
+      const clickedInside = filterRef.current.contains(e.target);
+      if (!clickedInside) setOpen(false);
+    };
+
+    document.addEventListener("pointerdown", handlePointerDown);
+    return () => document.removeEventListener("pointerdown", handlePointerDown);
+  }, []);
 
   return (
     <section className="controls">
@@ -16,17 +34,23 @@ function Controls({ searchTerm, setSearchTerm, region, setRegion }) {
         />
       </div>
 
-      <div className="filter">
-        <button className="filter__trigger" onClick={() => setOpen((s) => !s)}>
+      <div className="filter" ref={filterRef}>
+        <button
+          type="button"
+          className="filter__trigger"
+          onClick={() => setOpen((s) => !s)}
+          aria-haspopup="listbox"
+          aria-expanded={open}
+        >
           <span>{region || "Filter by Region"}</span>
-          <span>⌄</span>
         </button>
 
         {open && (
-          <ul className="filter__menu">
+          <ul className="filter__menu" role="listbox">
             {regions.map((r) => (
               <li key={r}>
                 <button
+                  type="button"
                   onClick={() => {
                     setRegion(r);
                     setOpen(false);
@@ -36,8 +60,10 @@ function Controls({ searchTerm, setSearchTerm, region, setRegion }) {
                 </button>
               </li>
             ))}
+
             <li>
               <button
+                type="button"
                 onClick={() => {
                   setRegion("");
                   setOpen(false);
@@ -52,5 +78,3 @@ function Controls({ searchTerm, setSearchTerm, region, setRegion }) {
     </section>
   );
 }
-
-export default Controls;

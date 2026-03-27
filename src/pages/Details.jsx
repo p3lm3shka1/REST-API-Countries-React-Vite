@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import countries from "../data.json";
+// import countries from "../data/data.json";
 import Header from "../components/Header";
 import {
   formatPopulation,
@@ -8,50 +8,69 @@ import {
   getLanguages,
   getNativeName,
 } from "../utils";
+import { getBorderCountriesByCodes, getCountryByCode } from "../data/api";
 
-function Details() {
+export default function Details() {
   const { code } = useParams();
   const navigate = useNavigate();
   const [theme, setTheme] = useState(
     () => localStorage.getItem("theme") || "dark",
   );
 
+  const [country, setCountry] = useState(null);
+  const [borders, setBorders] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
   useEffect(() => {
     document.documentElement.setAttribute("data-theme", theme);
     localStorage.setItem("theme", theme);
   }, [theme]);
 
-  const country = useMemo(
-    () => countries.find((c) => c.alpha3Code === code),
-    [code],
-  );
+  useEffect(() => {
+    let ignore = false;
 
-  const borders = useMemo(() => {
-    if (!country?.borders?.length) return [];
-    return country.borders
-      .map((b) => countries.find((c) => c.alpha3Code === b))
-      .filter(Boolean);
+    async function loadDetails() {
+      try {
+        setLoading(true);
+        setError("");
+
+        const c = await getCountryByCode(code);
+        if (!c) throw new Error("Not found");
+
+        if (!ignore) setCountry(c);
+
+        const borderList = await getBorderCountriesByCodes(c.borders || []);
+        if (!ignore) setBorders(borderList);
+      } catch (e) {
+        console.error("Details load error:", e);
+        if (!ignore) setError("Failed to load country details.");
+      } finally {
+        if (!ignore) setLoading(false);
+      }
+    }
+
+    loadDetails();
+    return () => {
+      ignore = true;
+    };
+  }, [code]);
+
+  const normalized = useMemo(() => {
+    if (!country) return null;
+    return {
+      name: country.name?.common || "Unknown",
+      nativeName: getNativeName(country),
+      population: country.population || 0,
+      region: country.region || "—",
+      subregion: country.subregion || "—",
+      capital: country.capital?.[0] || "—",
+      topLevelDomain: country.tld || [],
+      currencies: getCurrencies(country),
+      languages: getLanguages(country),
+      flag: country.flags?.png || country.flags?.svg || "",
+    };
   }, [country]);
-
-  if (!country) {
-    return (
-      <div className="page">
-        <Header
-          theme={theme}
-          onToggleTheme={() =>
-            setTheme((p) => (p === "dark" ? "light" : "dark"))
-          }
-        />
-        <main className="container main">
-          <button className="back-btn" onClick={() => navigate(-1)}>
-            ← Back
-          </button>
-          <p>Country not found.</p>
-          <Link to="/">Go home</Link>
-        </main>
-      </div>
-    );
-  }
 
   return (
     <div className="page">
@@ -65,72 +84,75 @@ function Details() {
           ← Back
         </button>
 
-        <section className="details__content">
-          <img
-            src={country.flags.png}
-            alt={country.name}
-            className="details__flag"
-          />
+        {loading && <p>Loading country...</p>}
+        {error && <p>{error}</p>}
 
-          <div>
-            <h2>{country.name}</h2>
+        {!loading && !error && normalized && (
+          <section className="details__content">
+            <img
+              src={normalized.flag}
+              alt={normalized.name}
+              className="details__flag"
+            />
 
-            <div className="details__cols">
-              <div>
-                <p>
-                  <strong>Native Name:</strong> {getNativeName(country)}
-                </p>
-                <p>
-                  <strong>Population:</strong>{" "}
-                  {formatPopulation(country.population)}
-                </p>
-                <p>
-                  <strong>Region:</strong> {country.region}
-                </p>
-                <p>
-                  <strong>Sub Region:</strong> {country.subregion || "—"}
-                </p>
-                <p>
-                  <strong>Capital:</strong> {country.capital || "—"}
-                </p>
+            <div>
+              <h2>{normalized.name}</h2>
+
+              <div className="details__cols">
+                <div>
+                  <p>
+                    <strong>Native Name:</strong> {normalized.nativeName}
+                  </p>
+                  <p>
+                    <strong>Population:</strong>{" "}
+                    {formatPopulation(normalized.population)}
+                  </p>
+                  <p>
+                    <strong>Region:</strong> {normalized.region}
+                  </p>
+                  <p>
+                    <strong>Sub Region:</strong> {normalized.subregion}
+                  </p>
+                  <p>
+                    <strong>Capital:</strong> {normalized.capital}
+                  </p>
+                </div>
+                <div>
+                  <p>
+                    <strong>Top Level Domain:</strong>{" "}
+                    {normalized.topLevelDomain.join(", ") || "—"}
+                  </p>
+                  <p>
+                    <strong>Currencies:</strong> {normalized.currencies}
+                  </p>
+                  <p>
+                    <strong>Languages:</strong> {normalized.languages}
+                  </p>
+                </div>
               </div>
-              <div>
-                <p>
-                  <strong>Top Level Domain:</strong>{" "}
-                  {country.topLevelDomain?.join(", ") || "—"}
-                </p>
-                <p>
-                  <strong>Currencies:</strong> {getCurrencies(country)}
-                </p>
-                <p>
-                  <strong>Languages:</strong> {getLanguages(country)}
-                </p>
+
+              <div className="borders">
+                <strong>Border Countries:</strong>
+                <div className="borders__list">
+                  {borders.length ? (
+                    borders.map((b) => (
+                      <Link
+                        key={b.cca3}
+                        to={`/country/${b.cca3}`}
+                        className="pill"
+                      >
+                        {b.name?.common}
+                      </Link>
+                    ))
+                  ) : (
+                    <span>None</span>
+                  )}
+                </div>
               </div>
             </div>
-
-            <div className="borders">
-              <strong>Border Countries:</strong>
-              <div className="borders__list">
-                {borders.length ? (
-                  borders.map((b) => (
-                    <Link
-                      key={b.alpha3Code}
-                      to={`/country/${b.alpha3Code}`}
-                      className="pill"
-                    >
-                      {b.name}
-                    </Link>
-                  ))
-                ) : (
-                  <span>None</span>
-                )}
-              </div>
-            </div>
-          </div>
-        </section>
+          </section>
+        )}
       </main>
     </div>
   );
 }
-
-export default Details;

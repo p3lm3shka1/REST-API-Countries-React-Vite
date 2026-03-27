@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
-import countries from "../data.json";
+// import countries from "../data/data.json";
 import Header from "../components/Header";
 import Controls from "../components/Controls";
 import CountryCard from "../components/CountryCard";
 import arrowIcon from "../assets/images/arrow-up.svg";
+import { getAllCountries } from "../data/api";
 
 const STEP = 8;
 
@@ -16,6 +17,10 @@ export default function Home() {
   const [visibleCount, setVisibleCount] = useState(STEP);
   const [showTopBtn, setShowTopBtn] = useState(false);
 
+  const [countries, setCountries] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
   useEffect(() => {
     document.documentElement.setAttribute("data-theme", theme);
     localStorage.setItem("theme", theme);
@@ -27,11 +32,33 @@ export default function Home() {
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
+  useEffect(() => {
+    let ignore = false;
+
+    async function load() {
+      try {
+        setLoading(true);
+        setError("");
+        const data = await getAllCountries();
+        if (!ignore) setCountries(data);
+      } catch {
+        if (!ignore) setError("Failed to load countries. Please try again.");
+      } finally {
+        if (!ignore) setLoading(false);
+      }
+    }
+
+    load();
+    return () => {
+      ignore = true;
+    };
+  }, []);
+
   const filtered = useMemo(() => {
     return countries
       .filter((c) => c.name.toLowerCase().includes(searchTerm.toLowerCase()))
       .filter((c) => (region ? c.region === region : true));
-  }, [searchTerm, region]);
+  }, [countries, searchTerm, region]);
 
   useEffect(() => {
     setVisibleCount(STEP);
@@ -55,29 +82,35 @@ export default function Home() {
           setRegion={setRegion}
         />
 
-        {filtered.length === 0 ? (
+        {loading && <p>Loading countries...</p>}
+        {error && <p className="empty">{error}</p>}
+
+        {!loading && !error && filtered.length === 0 ? (
           <p className="empty">No results found.</p>
         ) : (
-          <>
-            <section className="grid">
-              {visibleCountries.map((country) => (
-                <CountryCard key={country.alpha3Code} country={country} />
-              ))}
-            </section>
+          !loading &&
+          !error && (
+            <>
+              <section className="grid">
+                {visibleCountries.map((country) => (
+                  <CountryCard key={country.alpha3Code} country={country} />
+                ))}
+              </section>
 
-            <div className="see-more-wrap">
-              {hasMore ? (
-                <button
-                  className="see-more-btn"
-                  onClick={() => setVisibleCount((prev) => prev + STEP)}
-                >
-                  See more
-                </button>
-              ) : (
-                <p className="all-loaded">All countries are shown</p>
-              )}
-            </div>
-          </>
+              <div className="see-more-wrap">
+                {hasMore ? (
+                  <button
+                    className="see-more-btn"
+                    onClick={() => setVisibleCount((prev) => prev + STEP)}
+                  >
+                    See more
+                  </button>
+                ) : (
+                  <p className="all-loaded">All countries are shown</p>
+                )}
+              </div>
+            </>
+          )
         )}
       </main>
 
